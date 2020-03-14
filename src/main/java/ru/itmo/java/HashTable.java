@@ -2,118 +2,144 @@ package ru.itmo.java;
 
 public class HashTable {
 
+    private double loadFactor;
+    private int threshold, usedCells;
     private Entry[] keyValueArray;
-    private int elementsCount = 0;      // count of used cells
-    private float loadFactor = 0.5f;
-    private int threshold = 0;          // number of cells when we have to resize the table
 
-
-    HashTable() {
-        keyValueArray = new Entry[8];
-    }
-
-    HashTable(int newSize) {
-        keyValueArray = new Entry[newSize];
-    }
-
-    HashTable(int newSize, float loadFactor) {
+    public HashTable(int size, double loadFactor) {
+        keyValueArray = new Entry[size];
+        for (int i = 0; i < keyValueArray.length; i++) {
+            keyValueArray[i] = new Entry(null, null);
+        }
         this.loadFactor = loadFactor;
-        keyValueArray = new Entry[newSize];
+        this.threshold = (int) (this.loadFactor * this.keyValueArray.length);
+        this.usedCells = 0;
     }
 
-    Object put(Object key, Object value) {
+    public HashTable(int size) {
+        this(size, 0.5);
+    }
 
-        for (int i = Math.abs(key.hashCode()) % keyValueArray.length; i < keyValueArray.length; ++i) {
-            if (keyValueArray[i] == null || keyValueArray[i].deleted && keyValueArray[i].key.equals(key)) {
-                keyValueArray[i] = new Entry(key, value);
-                ++elementsCount;
+    public HashTable() {
+        this(16, 0.5);
+    }
+
+    private static class Entry {
+        Object key, value;
+        int hashCode;
+        boolean deleted = false;
+
+        public Entry(Object key, Object value) {
+            this.key = key;
+            this.value = value;
+            this.hashCode = this.key != null ? Math.abs(this.key.hashCode()) : -1;
+        }
+    }
+
+    public Object put(Object key, Object value) {
+
+        Entry newObject = new Entry(key, value);
+        Object out = null;
+        Integer index = getIndex(key);
+
+        if (index != null) {
+            out = keyValueArray[index].value;
+            keyValueArray[index].value = value;
+        } else {
+            if (this.usedCells >= threshold) {
                 resize();
-                return null;
             }
-            if (keyValueArray[i].key.equals(key)) {
-                Object save = keyValueArray[i].value;
-                keyValueArray[i].value = value;
-                return save;
+
+            index = newObject.hashCode % keyValueArray.length;
+
+            while (keyValueArray[index].key != null) {
+                index++;
+                if (index == keyValueArray.length) {
+                    index = 0;
+                }
             }
-            if (i == keyValueArray.length - 1) {
-                i = 0;
-            }
+
+            keyValueArray[index] = newObject;
+            ++usedCells;
         }
 
-        return null;
+        return out;
     }
 
-    Object get(Object key) {
-        for (int i = Math.abs(key.hashCode()) % keyValueArray.length; i < keyValueArray.length; ++i) {
-            if (keyValueArray[i] == null) {
-                return null;
-            }
-            if (keyValueArray[i].key.equals(key) && !keyValueArray[i].deleted) {
-                return keyValueArray[i].value;
-            }
-            if (i == keyValueArray.length - 1) {
-                i = 0;
-            }
+    public Object get(Object key) {
+
+        Integer indexInArray = getIndex(key);
+
+        if (indexInArray == null) {
+            return null;
         }
 
-        return null;
+        return keyValueArray[indexInArray].value;
     }
 
-    Object remove(Object key) {
+    public Object remove(Object key) {
 
-        for (int i = Math.abs(key.hashCode()) % keyValueArray.length; i < keyValueArray.length; ++i) {
-            if (keyValueArray[i] == null) {
-                return null;
-            }
-            if (keyValueArray[i].key.equals(key) && !keyValueArray[i].deleted) {
-                keyValueArray[i].deleted = true;
-                --elementsCount;
-                return keyValueArray[i].value;
-            }
-            if (i == keyValueArray.length - 1) {
-                i = 0;
-            }
+        Integer index = getIndex(key);
+        Object result = null;
+
+        if (index != null) {
+            result = keyValueArray[index].value;
+            keyValueArray[index].deleted = true;
+            keyValueArray[index].key = null;
+            keyValueArray[index].value = null;
+            keyValueArray[index].hashCode = -1;
+            --usedCells;
         }
 
-        return null;
+        return result;
+    }
+
+    public int size() {
+        return this.usedCells;
     }
 
     private void resize() {
-        if (this.size() < getThreshold()) {
-            return;
+        Entry[] oldData = this.keyValueArray;
+        this.keyValueArray = new Entry[oldData.length * 2];
+        usedCells = 0;
+        threshold = (int) (this.keyValueArray.length * loadFactor);
+        for (int i = 0; i < keyValueArray.length; i++) {
+            keyValueArray[i] = new Entry(null, null);
         }
 
-        Entry[] save = keyValueArray;
-        keyValueArray = new Entry[save.length * 2];
-        threshold = (int) (keyValueArray.length * loadFactor);
-        elementsCount = 0;
-        for (int i = 0; i < save.length; ++i) {
-            if (save[i] != null && !save[i].deleted) {
-                put(save[i].key, save[i].value);
+        for (int i = 0; i < oldData.length; i++) {
+            if (oldData[i] == null) {
+                continue;
+            }
+            if (oldData[i].hashCode != -1) {
+                put(oldData[i].key, oldData[i].value);
             }
         }
     }
 
-    int getThreshold() {
-        threshold = (int) (keyValueArray.length * loadFactor);
-        return threshold;
-    }
+    private Integer getIndex(Object key) {
+        int hash = Math.abs(key.hashCode());
+        int firstIndex = hash % keyValueArray.length;
+        Integer index = null;
 
-    int size() {
-        return elementsCount;
-    }
-
-    float getLoadFactor() {
-        return loadFactor;
-    }
-
-    private class Entry {
-        private Object key, value;
-        private boolean deleted = false;
-
-        Entry(Object newKey, Object newValue) {
-            key = newKey;
-            value = newValue;
+        for (int i = firstIndex; i < keyValueArray.length; i++) {
+            if (keyValueArray[i] == null) {
+                return index;
+            }
+            if (keyValueArray[i].hashCode == hash && keyValueArray[i].key.equals(key)) {
+                index = i;
+                break;
+            }
+            if (i == keyValueArray.length - 1) {
+                i = -1;
+            }
+            if (i == firstIndex - 1 ||
+                    (i != -1 && keyValueArray[i].value == null && !keyValueArray[i].deleted)) {
+                index = null;
+                break;
+            }
         }
+
+        return index;
     }
 }
