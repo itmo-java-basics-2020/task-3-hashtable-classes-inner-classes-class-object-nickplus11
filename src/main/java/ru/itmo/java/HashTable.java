@@ -2,6 +2,9 @@ package ru.itmo.java;
 
 public class HashTable {
 
+
+    private static final int DEFAULT_SIZE = 16;
+    private static final double DEFAULT_LOAD_FACTOR = 0.5;
     private double loadFactor;
     private int threshold, usedCells;
     private Entry[] keyValueArray;
@@ -17,11 +20,11 @@ public class HashTable {
     }
 
     public HashTable(int size) {
-        this(size, 0.5);
+        this(size, DEFAULT_LOAD_FACTOR);
     }
 
     public HashTable() {
-        this(16, 0.5);
+        this(DEFAULT_SIZE, DEFAULT_LOAD_FACTOR);
     }
 
     private static class Entry {
