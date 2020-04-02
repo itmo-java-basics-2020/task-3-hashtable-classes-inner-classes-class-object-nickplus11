@@ -2,21 +2,16 @@ package ru.itmo.java;
 
 public class HashTable {
 
-
     private static final int DEFAULT_SIZE = 16;
     private static final double DEFAULT_LOAD_FACTOR = 0.5;
     private double loadFactor;
-    private int threshold, usedCells;
-    private Entry[] keyValueArray;
+    private int usedCells;
+    private KeyValuePair[] keyValueArray;
 
     public HashTable(int size, double loadFactor) {
-        keyValueArray = new Entry[size];
-        for (int i = 0; i < keyValueArray.length; i++) {
-            keyValueArray[i] = new Entry(null, null);
-        }
+        usedCells = 0;
         this.loadFactor = loadFactor;
-        this.threshold = (int) (this.loadFactor * this.keyValueArray.length);
-        this.usedCells = 0;
+        keyValueArray = new KeyValuePair[size];
     }
 
     public HashTable(int size) {
@@ -27,71 +22,84 @@ public class HashTable {
         this(DEFAULT_SIZE, DEFAULT_LOAD_FACTOR);
     }
 
-    private static class Entry {
-        Object key, value;
-        int hashCode;
-        boolean deleted = false;
-
-        public Entry(Object key, Object value) {
-            this.key = key;
-            this.value = value;
-            this.hashCode = this.key != null ? Math.abs(this.key.hashCode()) : -1;
-        }
-    }
 
     public Object put(Object key, Object value) {
+        Object previousValue = null;
+        int hashCode = (Math.abs(key.hashCode()) % keyValueArray.length);
 
-        Entry newObject = new Entry(key, value);
-        Object out = null;
-        Integer index = getIndex(key);
-
-        if (index != null) {
-            out = keyValueArray[index].value;
-            keyValueArray[index].value = value;
-        } else {
-            if (this.usedCells >= threshold) {
-                resize();
-            }
-
-            index = newObject.hashCode % keyValueArray.length;
-
-            while (keyValueArray[index].key != null) {
-                index++;
-                if (index == keyValueArray.length) {
-                    index = 0;
+        if (get(key) == null) {
+            for (int i = hashCode; i < keyValueArray.length; i = (i + 1) % keyValueArray.length) {
+                if (keyValueArray[i] == null || keyValueArray[i].isDeleted) {
+                    keyValueArray[i] = new KeyValuePair(key, value);
+                    ++usedCells;
+                    break;
+                }
+                if (i == hashCode - 1) {
+                    break;
                 }
             }
-
-            keyValueArray[index] = newObject;
-            ++usedCells;
+        } else {
+            for (int i = hashCode; i < keyValueArray.length; i = (i + 1) % keyValueArray.length) {
+                if (keyValueArray[i] == null || keyValueArray[i].isDeleted) {
+                    continue;
+                }
+                if (keyValueArray[i].key.equals(key)) {
+                    previousValue = keyValueArray[i].value;
+                    keyValueArray[i].value = value;
+                    keyValueArray[i].isDeleted = false;
+                    break;
+                }
+                if (i == hashCode - 1) {
+                    break;
+                }
+            }
         }
 
-        return out;
+        if ((double) usedCells / keyValueArray.length > loadFactor) {
+            resize();
+        }
+
+        return previousValue;
     }
 
     public Object get(Object key) {
+        Object result = null;
 
-        Integer indexInArray = getIndex(key);
+        int hashCode = (Math.abs(key.hashCode()) % keyValueArray.length);
 
-        if (indexInArray == null) {
-            return null;
+        for (int i = hashCode; i < keyValueArray.length; i = (i + 1) % keyValueArray.length) {
+            if (keyValueArray[i] == null) {
+                break;
+            }
+            if (!keyValueArray[i].isDeleted && keyValueArray[i].key.equals(key)) {
+                result = keyValueArray[i].value;
+                break;
+            }
+            if (i == hashCode - 1) {
+                break;
+            }
         }
 
-        return keyValueArray[indexInArray].value;
+        return result;
     }
 
     public Object remove(Object key) {
-
-        Integer index = getIndex(key);
         Object result = null;
+        int hashCode = (Math.abs(key.hashCode()) % keyValueArray.length);
 
-        if (index != null) {
-            result = keyValueArray[index].value;
-            keyValueArray[index].deleted = true;
-            keyValueArray[index].key = null;
-            keyValueArray[index].value = null;
-            keyValueArray[index].hashCode = -1;
-            --usedCells;
+        for (int i = hashCode; i < keyValueArray.length; i = (i + 1) % keyValueArray.length) {
+            if (keyValueArray[i] == null) {
+                break;
+            }
+            if (!keyValueArray[i].isDeleted && keyValueArray[i].key.equals(key)) {
+                result = keyValueArray[i].value;
+                keyValueArray[i].isDeleted = true;
+                --usedCells;
+                break;
+            }
+            if (i == hashCode - 1) {
+                break;
+            }
         }
 
         return result;
@@ -102,47 +110,25 @@ public class HashTable {
     }
 
     private void resize() {
-        Entry[] oldData = this.keyValueArray;
-        this.keyValueArray = new Entry[oldData.length * 2];
+        KeyValuePair[] previousKeyValueArray = keyValueArray;
+        keyValueArray = new KeyValuePair[keyValueArray.length * 2];
         usedCells = 0;
-        threshold = (int) (this.keyValueArray.length * loadFactor);
-        for (int i = 0; i < keyValueArray.length; i++) {
-            keyValueArray[i] = new Entry(null, null);
-        }
 
-        for (int i = 0; i < oldData.length; i++) {
-            if (oldData[i] == null) {
-                continue;
-            }
-            if (oldData[i].hashCode != -1) {
-                put(oldData[i].key, oldData[i].value);
+        for (int i = 0; i < previousKeyValueArray.length; ++i) {
+            if (previousKeyValueArray[i] != null && !previousKeyValueArray[i].isDeleted) {
+                put(previousKeyValueArray[i].key, previousKeyValueArray[i].value);
             }
         }
     }
 
-    private Integer getIndex(Object key) {
-        int hash = Math.abs(key.hashCode());
-        int firstIndex = hash % keyValueArray.length;
-        Integer index = null;
+    private static class KeyValuePair {
+        Object key, value;
+        boolean isDeleted;
 
-        for (int i = firstIndex; i < keyValueArray.length; i++) {
-            if (keyValueArray[i] == null) {
-                return index;
-            }
-            if (keyValueArray[i].hashCode == hash && keyValueArray[i].key.equals(key)) {
-                index = i;
-                break;
-            }
-            if (i == keyValueArray.length - 1) {
-                i = -1;
-            }
-            if (i == firstIndex - 1 ||
-                    (i != -1 && keyValueArray[i].value == null && !keyValueArray[i].deleted)) {
-                index = null;
-                break;
-            }
+        KeyValuePair(Object key, Object value) {
+            this.key = key;
+            this.value = value;
+            isDeleted = false;
         }
-
-        return index;
     }
 }
